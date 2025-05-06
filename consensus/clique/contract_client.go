@@ -47,4 +47,25 @@ type ContractClient interface {
 
 	// Call for eligible validators
 	GetEligibleValidators(header *types.Header, ibs *state.IntraBlockState) ([]*ctypes.Validator, error)
+
+	// Call for stake manager address
+	GetStakeManagerStorage(header *types.Header, ibs *state.IntraBlockState) (libcommon.Address, error)
+
+	// Call for stake manager vault address
+	GetStakeManagerVault(header *types.Header, stakeManager libcommon.Address, ibs *state.IntraBlockState) (libcommon.Address, error)
+
+	// Call for nft contract address
+	GetNftContract(header *types.Header, stakeManager libcommon.Address, ibs *state.IntraBlockState) (libcommon.Address, error)
+
+	// Call for KKUB address
+	GetKKUB(header *types.Header, stakeManager libcommon.Address, ibs *state.IntraBlockState) (libcommon.Address, error)
+
+	// Call for slash threshold
+	GetSlashThreshold(header *types.Header, slashManager libcommon.Address, ibs *state.IntraBlockState) (*big.Int, error)
+
+	// Call for slash epoch size
+	GetSlashEpochSize(header *types.Header, slashManager libcommon.Address, ibs *state.IntraBlockState) (*big.Int, error)
+
+	// Call for solo slash rate
+	GetSoloSlashRate(header *types.Header, stakeManagerStorage libcommon.Address, ibs *state.IntraBlockState) (*big.Int, error)
 }

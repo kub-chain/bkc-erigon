@@ -7,8 +7,13 @@ WORKDIR /app
 ADD go.mod go.mod
 ADD go.sum go.sum
 
+# We copy all files before downloading the modules
+# beacause we need the golang local package mapping 
+# to work on go.mod especially for the erigon package
+# replace github.com/ledgerwatch/erigon-lib => ./erigon-lib 
+# replace github.com/ledgerwatch/erigon-snapshot => ./erigon-snapshot
+ADD . . 
 RUN go mod download
-ADD . .
 
 RUN --mount=type=cache,target=/root/.cache \
     --mount=type=cache,target=/tmp/go-build \

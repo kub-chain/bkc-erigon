@@ -33,6 +33,8 @@ import (
 	"github.com/goccy/go-json"
 	lru "github.com/hashicorp/golang-lru/arc/v2"
 	"github.com/ledgerwatch/erigon/consensus/clique/ctypes"
+	"github.com/ledgerwatch/erigon/consensus/clique/hardfork"
+	"github.com/ledgerwatch/erigon/consensus/clique/hardfork/lausanne"
 	"github.com/ledgerwatch/erigon/turbo/services"
 	"github.com/ledgerwatch/log/v3"
 	"golang.org/x/exp/slices"
@@ -505,6 +507,17 @@ func (c *Clique) Finalize(_ *chain.Config, header *types.Header, state *state.In
 
 func (c *Clique) finalize(header *types.Header, state *state.IntraBlockState, txs types.Transactions, receipts types.Receipts, chain consensus.ChainHeaderReader, mining bool,
 ) (types.Transactions, types.Receipts, error) {
+	number := header.Number.Uint64()
+	snap, err := c.Snapshot(chain, number-1, header.ParentHash, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	if chain.Config().IsLausanne(header.Number.Uint64()) && header.Number.Cmp(chain.Config().LausanneBlock) == 0 {
+		err := c.applyLausanneHardfork(header, state, snap.SystemContracts.StakeManager, snap.SystemContracts.SlashManager)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
 	if chain.Config().IsChaophraya(header.Number.Uint64()) {
 
 		if chain.Config().ChaophrayaBlock.Cmp(header.Number) == 0 {
@@ -515,13 +528,6 @@ func (c *Clique) finalize(header *types.Header, state *state.IntraBlockState, tx
 			return nil, nil, err
 		}
 		txs = userTxs
-
-		number := header.Number.Uint64()
-
-		snap, err := c.Snapshot(chain, number-1, header.ParentHash, nil)
-		if err != nil {
-			return nil, nil, err
-		}
 
 		if needToUpdateValidatorList(c.ChainConfig, header.Number) {
 			newValidators, _, err := c.contractClient.GetCurrentValidators(header, state, new(big.Int).SetUint64(number+1))
@@ -1115,4 +1121,53 @@ func (c *Clique) snapshots(latest uint64, total int) ([]*Snapshot, error) {
 	}
 
 	return res, nil
+}
+
+func (c *Clique) applyLausanneHardfork(header *types.Header, state *state.IntraBlockState, stakeManager libcommon.Address, slashManager libcommon.Address) error {
+	stakeManagerStorage, err := c.contractClient.GetStakeManagerStorage(header, state)
+	if err != nil {
+		return fmt.Errorf("failed to get stake manager storage: %v", err)
+	}
+	stakeManagerVault, err := c.contractClient.GetStakeManagerVault(header, stakeManager, state)
+	if err != nil {
+		return fmt.Errorf("failed to get stake manager vault: %v", err)
+	}
+	nftContract, err := c.contractClient.GetNftContract(header, stakeManager, state)
+	if err != nil {
+		return fmt.Errorf("failed to get nft contract: %v", err)
+	}
+	kkub, err := c.contractClient.GetKKUB(header, stakeManager, state)
+	if err != nil {
+		return fmt.Errorf("failed to get kkub: %v", err)
+	}
+	slashThreshold, err := c.contractClient.GetSlashThreshold(header, slashManager, state)
+	if err != nil {
+		return fmt.Errorf("failed to get slash threshold: %v", err)
+	}
+	slashEpochSize, err := c.contractClient.GetSlashEpochSize(header, slashManager, state)
+	if err != nil {
+		return fmt.Errorf("failed to get slash epoch size: %v", err)
+	}
+	soloSlashRate, err := c.contractClient.GetSoloSlashRate(header, stakeManagerStorage, state)
+	if err != nil {
+		return fmt.Errorf("failed to get solo slash rate: %v", err)
+	}
+	params := lausanne.LausanneParams{
+		StakeManagerV2:        stakeManager,
+		StakeManagerStorageV2: stakeManagerStorage,
+		StakeManagerVault:     stakeManagerVault,
+		SlashManagerV2:        slashManager,
+		NftContract:           nftContract,
+		KKub:                  kkub,
+		SlashThreshold:        slashThreshold,
+		SlashEpochSize:        slashEpochSize,
+		SoloSlashRate:         soloSlashRate,
+	}
+	instruction, err := lausanne.New(params)
+	if err != nil {
+		return fmt.Errorf("failed to create lausanne instruction: %v", err)
+	}
+	hardfork.ApplyHardfork(state, instruction)
+	log.Info("⭐️ Lausanne Started", "number", header.Number, "name", instruction.Name, "stakeManagerStorage", stakeManagerStorage, "stakeManager", stakeManager, "slashManager", slashManager, "nftContract", nftContract, "kkub", kkub, "slashThreshold", slashThreshold, "slashEpochSize", slashEpochSize, "soloSlashRate", soloSlashRate)
+	return nil
 }
