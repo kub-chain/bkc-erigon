@@ -30,13 +30,14 @@ import (
 )
 
 type ContractClient struct {
-	stakeManagerABI abi.ABI
-	slashManagerABI abi.ABI
-	validatorSetABI abi.ABI
-	config          *chain.Config // Consensus engine configuration parameters
-	val             libcommon.Address
-	signFn          ctypes.SignerFn
-	engine          consensus.Engine
+	stakeManagerABI        abi.ABI
+	slashManagerABI        abi.ABI
+	validatorSetABI        abi.ABI
+	stakeManagerStorageAbi abi.ABI
+	config                 *chain.Config // Consensus engine configuration parameters
+	val                    libcommon.Address
+	signFn                 ctypes.SignerFn
+	engine                 consensus.Engine
 }
 
 func New(config *chain.Config) (*ContractClient, error) {
@@ -52,12 +53,17 @@ func New(config *chain.Config) (*ContractClient, error) {
 	if err != nil {
 		return &ContractClient{}, err
 	}
+	storageABI, err := abi.JSON(strings.NewReader(stakeManagerStorageABI))
+	if err != nil {
+		return &ContractClient{}, err
+	}
 
 	return &ContractClient{
-		stakeManagerABI: sABI,
-		slashManagerABI: slABI,
-		validatorSetABI: vABI,
-		config:          config,
+		stakeManagerABI:        sABI,
+		slashManagerABI:        slABI,
+		validatorSetABI:        vABI,
+		stakeManagerStorageAbi: storageABI,
+		config:                 config,
 	}, nil
 }
 
@@ -67,6 +73,99 @@ func (cc *ContractClient) Inject(val libcommon.Address, signFn ctypes.SignerFn, 
 	cc.val = val
 	cc.signFn = signFn
 	cc.engine = engine
+}
+
+func (cc *ContractClient) GetStakeManagerVault(header *types.Header, stakeManager common.Address, ibs *state.IntraBlockState) (common.Address, error) {
+	method := "stakeManagerVault"
+	// get packed data
+	data, err := cc.stakeManagerABI.Pack(method)
+	if err != nil {
+		log.Error("Failed to pack data for stakeManagerVault", "error", err)
+		return common.Address{}, err
+	}
+
+	msgData := hexutility.Bytes(data)
+	ibsWithoutCache := state.New(ibs.StateReader) // Create a new state reader without cache
+	_, result, err := cc.systemCall(header.Coinbase, stakeManager, msgData[:], ibsWithoutCache, header, u256.Num0)
+	if err != nil {
+		return common.Address{}, err
+	}
+
+	var ret0 common.Address
+	if err := cc.stakeManagerABI.UnpackIntoInterface(&ret0, method, result); err != nil {
+		return common.Address{}, err
+	}
+	return ret0, nil
+}
+
+func (cc *ContractClient) GetNftContract(header *types.Header, stakeManager common.Address, ibs *state.IntraBlockState) (common.Address, error) {
+	method := "nftContract"
+	// get packed data
+	data, err := cc.stakeManagerABI.Pack(method)
+	if err != nil {
+		log.Error("Failed to pack data for nftContract", "error", err)
+		return common.Address{}, err
+	}
+
+	msgData := hexutility.Bytes(data)
+	ibsWithoutCache := state.New(ibs.StateReader) // Use ibs to create a new state reader
+	_, result, err := cc.systemCall(header.Coinbase, stakeManager, msgData[:], ibsWithoutCache, header, u256.Num0)
+	if err != nil {
+		return common.Address{}, err
+	}
+
+	var ret0 common.Address
+	if err := cc.stakeManagerABI.UnpackIntoInterface(&ret0, method, result); err != nil {
+		return common.Address{}, err
+	}
+	return ret0, nil
+}
+
+func (cc *ContractClient) GetKKUB(header *types.Header, stakeManager common.Address, ibs *state.IntraBlockState) (common.Address, error) {
+	method := "kkub"
+	// get packed data
+	data, err := cc.stakeManagerABI.Pack(method)
+	if err != nil {
+		log.Error("Failed to pack data for kkub", "error", err)
+		return common.Address{}, err
+	}
+
+	msgData := hexutility.Bytes(data)
+	ibsWithoutCache := state.New(ibs.StateReader) // Use ibs to create a new state reader
+	_, result, err := cc.systemCall(header.Coinbase, stakeManager, msgData[:], ibsWithoutCache, header, u256.Num0)
+	if err != nil {
+		return common.Address{}, err
+	}
+
+	var ret0 common.Address
+	if err := cc.stakeManagerABI.UnpackIntoInterface(&ret0, method, result); err != nil {
+		return common.Address{}, err
+	}
+	return ret0, nil
+}
+
+func (cc *ContractClient) GetStakeManagerStorage(header *types.Header, ibs *state.IntraBlockState) (common.Address, error) {
+	method := "stakeManagerStorage"
+	// get packed data
+	data, err := cc.validatorSetABI.Pack(method)
+	if err != nil {
+		log.Error("Unable to pack tx for deposit", "error", err)
+		return common.Address{}, err
+	}
+
+	msgData := hexutility.Bytes(data)
+	toAddress := cc.getValidatorContract(header.Number)
+	ibsWithoutCache := state.New(ibs.StateReader)
+	_, result, err := cc.systemCall(header.Coinbase, toAddress, msgData[:], ibsWithoutCache, header, u256.Num0)
+	if err != nil {
+		return common.Address{}, err
+	}
+
+	var ret0 common.Address
+	if err := cc.validatorSetABI.UnpackIntoInterface(&ret0, method, result); err != nil {
+		return common.Address{}, err
+	}
+	return ret0, nil
 }
 
 func (cc *ContractClient) Slash(contract libcommon.Address, spoiledVal libcommon.Address, state *state.IntraBlockState, header *types.Header,
@@ -418,4 +517,73 @@ func encodeSigHeader(w io.Writer, header *types.Header) {
 	if err := rlp.Encode(w, enc); err != nil {
 		panic("can't encode: " + err.Error())
 	}
+}
+
+func (cc *ContractClient) GetSlashThreshold(header *types.Header, slashManager common.Address, ibs *state.IntraBlockState) (*big.Int, error) {
+	method := "threshold"
+	// get packed data
+	data, err := cc.slashManagerABI.Pack(method)
+	if err != nil {
+		log.Error("Unable to pack tx for GetSlashThreshold", "error", err)
+		return nil, err
+	}
+
+	msgData := hexutility.Bytes(data)
+	ibsWithoutCache := state.New(ibs.StateReader) // Use ibs to create a new state reader
+	_, result, err := cc.systemCall(header.Coinbase, slashManager, msgData[:], ibsWithoutCache, header, u256.Num0)
+	if err != nil {
+		return nil, err
+	}
+
+	var ret0 *big.Int
+	if err := cc.slashManagerABI.UnpackIntoInterface(&ret0, method, result); err != nil {
+		return nil, err
+	}
+	return ret0, nil
+}
+
+func (cc *ContractClient) GetSlashEpochSize(header *types.Header, slashManager common.Address, ibs *state.IntraBlockState) (*big.Int, error) {
+	method := "maxEpochSize"
+	// get packed data
+	data, err := cc.slashManagerABI.Pack(method)
+	if err != nil {
+		log.Error("Unable to pack tx for GetSlashEpochSize", "error", err)
+		return nil, err
+	}
+
+	msgData := hexutility.Bytes(data)
+	ibsWithoutCache := state.New(ibs.StateReader) // Use ibs to create a new state reader
+	_, result, err := cc.systemCall(header.Coinbase, slashManager, msgData[:], ibsWithoutCache, header, u256.Num0)
+	if err != nil {
+		return nil, err
+	}
+
+	var ret0 *big.Int
+	if err := cc.slashManagerABI.UnpackIntoInterface(&ret0, method, result); err != nil {
+		return nil, err
+	}
+	return ret0, nil
+}
+
+func (cc *ContractClient) GetSoloSlashRate(header *types.Header, stakeManagerStorage common.Address, ibs *state.IntraBlockState) (*big.Int, error) {
+	method := "soloSlashRate"
+	// get packed data
+	data, err := cc.stakeManagerStorageAbi.Pack(method)
+	if err != nil {
+		log.Error("Unable to pack tx for GetSoloSlashRate", "error", err)
+		return nil, err
+	}
+
+	msgData := hexutility.Bytes(data)
+	ibsWithoutCache := state.New(ibs.StateReader) // Use ibs to create a new state reader
+	_, result, err := cc.systemCall(header.Coinbase, stakeManagerStorage, msgData[:], ibsWithoutCache, header, u256.Num0)
+	if err != nil {
+		return nil, err
+	}
+
+	var ret0 *big.Int
+	if err := cc.stakeManagerStorageAbi.UnpackIntoInterface(&ret0, method, result); err != nil {
+		return nil, err
+	}
+	return ret0, nil
 }
