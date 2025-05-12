@@ -4,7 +4,7 @@
 [submodule "erigon-lib"]
 	path = erigon-lib
 	url = git@gitlab-shell.bbtcorp.io:proj-blockchain/erigon/erigon-lib.git
-	branch = bkc-pos
+	branch = bkc/main
 [submodule "erigon-snapshot"]
 	path = erigon-snapshot
 	url = git@gitlab-shell.bbtcorp.io:proj-blockchain/erigon/erigon-snapshot.git
