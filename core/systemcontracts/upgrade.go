@@ -85,7 +85,7 @@ func init() {
 	}
 	// TODO: example for local chain test (remove when ready for production release)
 	SystemContractCodeLookup[""] = map[libcommon.Address][]libcommon.CodeRecord{
-		libcommon.HexToAddress("0xa077f9f8f26a42590C93fE152f472dA102669546"): kubPosMainnetStakeManagerRecords,
+		libcommon.HexToAddress("0xa077f9f8f26a42590C93fE152f472dA102669546"): kubPosLocalStakeManagerRecords,
 	}
 }
 
