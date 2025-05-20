@@ -68,17 +68,3 @@ var (
 		},
 	}
 )
-
-// TODO: Local test only (remove when ready for production)
-var (
-	kubPosLocalStakeManagerRecords []libcommon.CodeRecord = []libcommon.CodeRecord{
-		{
-			BlockNumber: 2,
-			CodeHash:    libcommon.HexToHash("2cf47b1a7d70cf165d6131c046dc36e7331483f9acda895d57184bd61f14fa8a"), // Chanphraya
-		},
-		{
-			BlockNumber: 100,
-			CodeHash:    libcommon.HexToHash("b55c1bd656d20f94ce19b7642196e8394042ddaf2135f24f3f95ab59f032acef"), // Lausanne
-		},
-	}
-)

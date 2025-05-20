@@ -83,10 +83,6 @@ func init() {
 		KubPosSlashManagerTestnet:        kubPosTestnetSlashManagerRecords,
 		KubPosStakeManagerStorageTestnet: kubPosTestnetStakeManagerStorageRecords,
 	}
-	// TODO: example for local chain test (remove when ready for production release)
-	SystemContractCodeLookup[""] = map[libcommon.Address][]libcommon.CodeRecord{
-		libcommon.HexToAddress("0xa077f9f8f26a42590C93fE152f472dA102669546"): kubPosLocalStakeManagerRecords,
-	}
 }
 
 func UpgradeBuildInSystemContract(config *chain.Config, blockNumber *big.Int, statedb evmtypes.IntraBlockState, logger log.Logger) {
