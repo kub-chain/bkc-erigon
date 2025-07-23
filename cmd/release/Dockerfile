@@ -12,7 +12,7 @@ ARG GITHUB_TOKEN
 RUN go build -o releaser main.go
 RUN ./releaser --github-token=$GITHUB_TOKEN
 
-FROM nginx:1.21.3-alpine
+FROM nginx:1.29.0-alpine
 
 COPY page /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
