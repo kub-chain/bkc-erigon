@@ -445,7 +445,35 @@ func (c *Clique) Prepare(chain consensus.ChainHeaderReader, header *types.Header
 
 	header.Extra = append(header.Extra, make([]byte, ExtraSeal)...)
 
-	header.Time = parent.Time + c.config.Period
+	header.Time = parent.Time + chain.Config().GetBlockPeriod(header.Number.Uint64())
+
+	// If parent was sealed by Official Node (backup), add the 2s wait time
+	if chain.Config().IsBasel(parent.Number.Uint64()) {
+		// In Basel, Coinbase is the signer.
+		// We check if the parent's Coinbase is the Official Node.
+		if parent.Coinbase == snap.SystemContracts.OfficialNode {
+			if isNoturnDifficulty(parent.Difficulty) {
+
+				inturnSigner := snap.getInturnSigner(number)
+
+				// Get span for PARENT block
+				currentSpan, err := c.contractClient.GetCurrentSpan(parent, state)
+				if err == nil {
+					if isSpanFirstBlock(c.ChainConfig, parent.Number) {
+						currentSpan = new(big.Int).Add(currentSpan, libcommon.Big1)
+					}
+
+					// Check if slashed at PARENT state
+					slashed, err := c.contractClient.IsSlashed(snap.SystemContracts.SlashManager, inturnSigner, currentSpan, parent, state)
+					if err == nil && !slashed {
+						if header.Time-parent.Time < chain.Config().BaselBlock.Period+2 {
+							header.Time += 2
+						}
+					}
+				}
+			}
+		}
+	}
 
 	now := uint64(time.Now().Unix())
 	if header.Time < now {
