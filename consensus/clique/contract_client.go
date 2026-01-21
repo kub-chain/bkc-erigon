@@ -45,6 +45,9 @@ type ContractClient interface {
 	// Call for  current commited validators
 	GetCurrentValidators(header *types.Header, ibs *state.IntraBlockState, blockNumber *big.Int) ([]*ctypes.Validator, *ctypes.SystemContracts, error)
 
+	// Call for  current commited validators with super node
+	GetCurrentValidatorsWithSuperNode(header *types.Header, ibs *state.IntraBlockState, blockNumber *big.Int) ([]*ctypes.Validator, *ctypes.SystemContractsV2, error)
+
 	// Call for eligible validators
 	GetEligibleValidators(header *types.Header, ibs *state.IntraBlockState) ([]*ctypes.Validator, error)
 
@@ -68,4 +71,7 @@ type ContractClient interface {
 
 	// Call for solo slash rate
 	GetSoloSlashRate(header *types.Header, stakeManagerStorage libcommon.Address, ibs *state.IntraBlockState) (*big.Int, error)
+
+	// Call for validator info from stake manager contract
+	GetValidatorInfoValidatorShareContractByIndex(header *types.Header, ibs *state.IntraBlockState, stakeManagerStorage libcommon.Address, index *big.Int) (libcommon.Address, error)
 }

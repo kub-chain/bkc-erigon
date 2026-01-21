@@ -76,6 +76,11 @@ func (c *Clique) verifyHeader(chain consensus.ChainHeaderReader, header *types.H
 			signersBytes -= contractBytesLength
 		}
 	}
+
+	if header.Number.Cmp(new(big.Int).Add(libcommon.Big1, c.ChainConfig.BaselBlock.Block)) == 0 {
+		checkpoint = true
+	}
+
 	if !checkpoint && signersBytes != 0 {
 		return errExtraSigners
 	}

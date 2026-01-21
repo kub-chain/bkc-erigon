@@ -16,6 +16,12 @@ type SystemContracts struct {
 	OfficialNode libcommon.Address `json:"officialNode"`
 }
 
+type SystemContractsV2 struct {
+	StakeManager libcommon.Address `json:"stakeManager"`
+	SlashManager libcommon.Address `json:"slashManager"`
+	SuperNode    libcommon.Address `json:"superNode"`
+}
+
 // Validator represets Volatile state for each Validator
 type Validator struct {
 	Address     libcommon.Address `json:"signer"`

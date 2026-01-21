@@ -33,7 +33,7 @@ type ContractClient struct {
 	stakeManagerABI        abi.ABI
 	slashManagerABI        abi.ABI
 	validatorSetABI        abi.ABI
-	stakeManagerStorageAbi abi.ABI
+	stakeManagerStorageABI abi.ABI
 	config                 *chain.Config // Consensus engine configuration parameters
 	val                    libcommon.Address
 	signFn                 ctypes.SignerFn
@@ -62,7 +62,7 @@ func New(config *chain.Config) (*ContractClient, error) {
 		stakeManagerABI:        sABI,
 		slashManagerABI:        slABI,
 		validatorSetABI:        vABI,
-		stakeManagerStorageAbi: storageABI,
+		stakeManagerStorageABI: storageABI,
 		config:                 config,
 	}, nil
 }
@@ -321,6 +321,98 @@ func (cc *ContractClient) GetCurrentValidators(header *types.Header, ibs *state.
 	return valz, ca, nil
 }
 
+func (cc *ContractClient) GetCurrentValidatorsWithSuperNode(header *types.Header, ibs *state.IntraBlockState, blockNumber *big.Int) ([]*ctypes.Validator, *ctypes.SystemContractsV2, error) {
+	method := "getValidators"
+
+	// get packed data
+	data, err := cc.validatorSetABI.Pack(
+		method,
+		blockNumber,
+	)
+	if err != nil {
+		log.Error("Unable to pack tx for getValidators", "error", err)
+		return nil, nil, err
+	}
+
+	// call
+	msgData := (hexutility.Bytes)(data)
+	toAddress := cc.getValidatorContract(blockNumber)
+
+	ibsWithoutCache := state.New(ibs.StateReader)
+	_, result, err := cc.systemCall(header.Coinbase, toAddress, msgData[:], ibsWithoutCache, header, u256.Num0)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var (
+		ret0 = new([]common.Address)
+		ret1 = new([]*big.Int)
+		ret2 = new([3]common.Address)
+	)
+	out := &[]interface{}{
+		ret0,
+		ret1,
+		ret2,
+	}
+
+	if err := cc.validatorSetABI.UnpackIntoInterface(out, method, result); err != nil {
+		return nil, nil, err
+	}
+
+	valz := make([]*ctypes.Validator, len(*ret0))
+	for i, a := range *ret0 {
+		valz[i] = &ctypes.Validator{
+			Address:     a,
+			VotingPower: (*ret1)[i].Uint64(),
+		}
+	}
+
+	method = "stakeManagerStorage"
+	// get packed data
+	data, err = cc.validatorSetABI.Pack(method)
+	if err != nil {
+		log.Error("Unable to pack tx for deposit", "error", err)
+		return nil, nil, err
+	}
+
+	msgData = (hexutility.Bytes)(data)
+	_, result, err = cc.systemCall(header.Coinbase, toAddress, msgData[:], ibsWithoutCache, header, u256.Num0)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var stakeManagerStorageAddr common.Address
+	if err := cc.validatorSetABI.UnpackIntoInterface(&stakeManagerStorageAddr, method, result); err != nil {
+		return nil, nil, err
+	}
+
+	method = "superNode"
+
+	data, err = cc.stakeManagerStorageABI.Pack(method)
+	if err != nil {
+		log.Error("Unable to pack tx for deposit", "error", err)
+		return nil, nil, err
+	}
+
+	msgData = (hexutility.Bytes)(data)
+	_, result, err = cc.systemCall(header.Coinbase, stakeManagerStorageAddr, msgData[:], ibsWithoutCache, header, u256.Num0)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var superNode common.Address
+	if err := cc.stakeManagerStorageABI.UnpackIntoInterface(&superNode, method, result); err != nil {
+		return nil, nil, err
+	}
+
+	ca := &ctypes.SystemContractsV2{
+		StakeManager: (*ret2)[0],
+		SlashManager: (*ret2)[1],
+		SuperNode:    superNode,
+	}
+	return valz, ca, nil
+}
+
 // GetCurrentValidators get current validators
 func (cc *ContractClient) GetEligibleValidators(header *types.Header, ibs *state.IntraBlockState) ([]*ctypes.Validator, error) {
 	method := "getEligibleValidators"
@@ -568,7 +660,7 @@ func (cc *ContractClient) GetSlashEpochSize(header *types.Header, slashManager c
 func (cc *ContractClient) GetSoloSlashRate(header *types.Header, stakeManagerStorage common.Address, ibs *state.IntraBlockState) (*big.Int, error) {
 	method := "soloSlashRate"
 	// get packed data
-	data, err := cc.stakeManagerStorageAbi.Pack(method)
+	data, err := cc.stakeManagerStorageABI.Pack(method)
 	if err != nil {
 		log.Error("Unable to pack tx for GetSoloSlashRate", "error", err)
 		return nil, err
@@ -582,8 +674,34 @@ func (cc *ContractClient) GetSoloSlashRate(header *types.Header, stakeManagerSto
 	}
 
 	var ret0 *big.Int
-	if err := cc.stakeManagerStorageAbi.UnpackIntoInterface(&ret0, method, result); err != nil {
+	if err := cc.stakeManagerStorageABI.UnpackIntoInterface(&ret0, method, result); err != nil {
 		return nil, err
+	}
+	return ret0, nil
+}
+
+func (cc *ContractClient) GetValidatorInfoValidatorShareContractByIndex(header *types.Header, ibs *state.IntraBlockState, stakeManagerStorage common.Address, index *big.Int) (common.Address, error) {
+	method := "getValidatorInfoValidatorShareContractByIndex"
+	// get packed data
+	data, err := cc.stakeManagerStorageABI.Pack(
+		method,
+		index,
+	)
+	if err != nil {
+		log.Error("Unable to pack tx for GetValidatorInfoValidatorShareContractByIndex", "error", err)
+		return common.Address{}, err
+	}
+
+	msgData := (hexutility.Bytes)(data)
+	ibsWithoutCache := state.New(ibs.StateReader) // Use ibs to create a new state reader
+	_, result, err := cc.systemCall(header.Coinbase, stakeManagerStorage, msgData[:], ibsWithoutCache, header, u256.Num0)
+	if err != nil {
+		return common.Address{}, err
+	}
+
+	var ret0 common.Address
+	if err := cc.stakeManagerStorageABI.UnpackIntoInterface(&ret0, method, result); err != nil {
+		return common.Address{}, err
 	}
 	return ret0, nil
 }

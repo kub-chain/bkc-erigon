@@ -69,6 +69,7 @@ type Snapshot struct {
 	Votes           []*Vote                        `json:"votes"`           // List of votes cast in chronological order
 	Tally           map[libcommon.Address]Tally    `json:"tally"`           // Current vote tally to avoid recalculating
 	SystemContracts ctypes.SystemContracts         `json:"systemContracts"` // System contract addresses
+	SuperNode       libcommon.Address              `json:"superNode"`       // Super node address
 }
 
 // signersAscending implements the sort interface to allow sorting a list of addresses
@@ -241,7 +242,7 @@ func (s *Snapshot) apply(sigcache *lru.ARCCache[libcommon.Hash, libcommon.Addres
 			return nil, err
 		}
 
-		if _, ok := snap.Signers[signer]; !ok && signer != snap.SystemContracts.OfficialNode {
+		if _, ok := snap.Signers[signer]; !ok && signer != snap.SystemContracts.OfficialNode && signer != snap.SuperNode {
 			return nil, ErrUnauthorizedSigner
 		}
 		if !s.config.IsChaophraya(header.Number.Uint64()) {
@@ -256,7 +257,7 @@ func (s *Snapshot) apply(sigcache *lru.ARCCache[libcommon.Hash, libcommon.Addres
 		}
 
 		if s.config.IsChaophraya(header.Number.Uint64()) {
-			if _, ok := snap.Signers[signer]; !ok && signer != snap.SystemContracts.OfficialNode {
+			if _, ok := snap.Signers[signer]; !ok && signer != snap.SystemContracts.OfficialNode && signer != snap.SuperNode {
 				return nil, ErrUnauthorizedSigner
 			}
 		}
@@ -374,8 +375,30 @@ func (s *Snapshot) apply(sigcache *lru.ARCCache[libcommon.Hash, libcommon.Addres
 				snap.SystemContracts.StakeManager = *contracts[0]
 				snap.SystemContracts.SlashManager = *contracts[1]
 				snap.SystemContracts.OfficialNode = *contracts[2]
+
+				if s.config.IsBasel(number) {
+					snap.SystemContracts.OfficialNode = libcommon.Address{}
+					snap.SuperNode = *contracts[2]
+				}
 			}
 		}
+
+		if header.Number.Cmp(new(big.Int).Add(s.config.BaselBlock.Block, big.NewInt(1))) == 0 {
+			posBytes := header.Extra[ExtraVanity : len(header.Extra)-ExtraSeal]
+			if len(posBytes) < contractBytesLength {
+				log.Error("posBytes error", "bytes", posBytes)
+				// panic("invalid consensus bytes")
+			}
+			addressBytes := posBytes[len(posBytes)-contractBytesLength:]
+			contracts, err := ParseAddressBytes(addressBytes)
+			if err != nil {
+				log.Error("posBytes error", "posBytes", posBytes, "addressBytes", addressBytes)
+				// panic(err)
+			}
+			snap.SystemContracts.OfficialNode = libcommon.Address{}
+			snap.SuperNode = *contracts[2]
+		}
+
 		// If we're taking too much time (ecrecover), notify the user once a while
 		if time.Since(logged) > 8*time.Second {
 			logger.Info("Reconstructing voting history", "processed", i, "total", len(headers), "elapsed", common.PrettyDuration(time.Since(start)))
@@ -399,6 +422,7 @@ func (s *Snapshot) copy() *Snapshot {
 		Hash:            s.Hash,
 		Signers:         make(map[libcommon.Address]struct{}),
 		Validators:      s.Validators,
+		SuperNode:       s.SuperNode,
 		SystemContracts: s.SystemContracts,
 		Recents:         make(map[uint64]libcommon.Address),
 		Votes:           make([]*Vote, len(s.Votes)),
