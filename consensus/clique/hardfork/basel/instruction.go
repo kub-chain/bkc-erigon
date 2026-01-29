@@ -33,6 +33,8 @@ const (
 	SLOT_VALIDATOR_ADDRESS_TO_IDS = 20 // mapping(address => uint256[])
 	SLOT_VALIDATOR_LIST           = 21 // Validator[] array
 	SLOT_MINIMAL_LIST             = 22 // EnumerableSet array
+	SLOT_OFFICIAL_SIGNER_OLD      = 18 // Old official signer address
+	SLOT_OFFICIAL_SIGNER_NEW      = 19 // New official signer address
 	SLOT_SUPER_NODE_OLD           = 30 // Old super node address
 	SLOT_SUPER_NODE_NEW           = 31 // New super node address
 )
@@ -116,6 +118,12 @@ func New(state *state.IntraBlockState, params BaselParams) (hardfork.HardForkIns
 	shiftedBlockNumber := new(big.Int).Lsh(params.BaselBlock, 160)             // blockNumber_ << 160
 	superNodeAndValidBlock := new(big.Int).Add(tmpUint256, shiftedBlockNumber) // tmpUint256 += blockNumber_ << 160
 
+	// Update new offical node siginer to address 0, shift current to old
+	var currentOfficialNodeSigner uint256.Int
+	slotOfficialSignerNew := libcommon.BigToHash(big.NewInt(SLOT_OFFICIAL_SIGNER_NEW))
+	state.GetState(params.StakeManagerStorageV3, &slotOfficialSignerNew, &currentOfficialNodeSigner)
+	newOfficialNodeSigner := new(big.Int).Add(new(big.Int).SetBytes(libcommon.Address{}.Bytes()), shiftedBlockNumber)
+
 	instruction.Storage[params.StakeManagerStorageV3] = map[libcommon.Hash]libcommon.Hash{
 		// StakeManager reference
 		libcommon.BigToHash(big.NewInt(1)): libcommon.BytesToHash(params.StakeManagerV3.Bytes()),
@@ -123,6 +131,9 @@ func New(state *state.IntraBlockState, params BaselParams) (hardfork.HardForkIns
 		// Super node configuration
 		libcommon.BigToHash(big.NewInt(SLOT_SUPER_NODE_OLD)): libcommon.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000"),
 		libcommon.BigToHash(big.NewInt(SLOT_SUPER_NODE_NEW)): libcommon.BigToHash(superNodeAndValidBlock),
+
+		libcommon.BigToHash(big.NewInt(SLOT_OFFICIAL_SIGNER_NEW)): libcommon.BigToHash(newOfficialNodeSigner),
+		libcommon.BigToHash(big.NewInt(SLOT_OFFICIAL_SIGNER_OLD)): libcommon.BigToHash(currentOfficialNodeSigner.ToBig()),
 
 		// New validator struct (6 slots)
 		libcommon.BigToHash(new(big.Int).Add(nextValidatorSoltInt, big.NewInt(0))): libcommon.BigToHash(big.NewInt(0)),
