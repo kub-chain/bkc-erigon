@@ -781,7 +781,6 @@ func (c *Clique) Authorize(val libcommon.Address, signFn ctypes.SignerFn) {
 // Seal implements consensus.Engine, attempting to create a sealed block using
 // the local signing credentials.
 func (c *Clique) Seal(chain consensus.ChainHeaderReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}, state *state.IntraBlockState) error {
-
 	header := block.Header()
 
 	// Sealing the genesis block is not supported
@@ -874,6 +873,7 @@ func (c *Clique) Seal(chain consensus.ChainHeaderReader, block *types.Block, res
 			return
 		case <-time.After(delay):
 		}
+
 		if chain.Config().IsChaophraya(header.Number.Uint64()) && (!isInturnDifficulty(header.Difficulty) || slashed) {
 			defaultWaitTime := time.Duration(2)
 			if slashed {
@@ -883,7 +883,7 @@ func (c *Clique) Seal(chain consensus.ChainHeaderReader, block *types.Block, res
 			case <-stop:
 				return
 			case <-time.After(defaultWaitTime * time.Second):
-				if val != snap.SystemContracts.OfficialNode {
+				if val != snap.SystemContracts.OfficialNode && val != snap.SuperNode {
 					<-stop
 					return
 				}
