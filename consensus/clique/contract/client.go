@@ -34,6 +34,7 @@ type ContractClient struct {
 	slashManagerABI        abi.ABI
 	validatorSetABI        abi.ABI
 	stakeManagerStorageABI abi.ABI
+	bkcValidatorSet        libcommon.Address
 	config                 *chain.Config // Consensus engine configuration parameters
 	val                    libcommon.Address
 	signFn                 ctypes.SignerFn
@@ -65,6 +66,10 @@ func New(config *chain.Config) (*ContractClient, error) {
 		stakeManagerStorageABI: storageABI,
 		config:                 config,
 	}, nil
+}
+
+func (cc *ContractClient) SetBKCValidatorAddress(addr common.Address) {
+	cc.bkcValidatorSet = addr
 }
 
 // Initialize function, should be called after consensus engine are selected
@@ -321,7 +326,7 @@ func (cc *ContractClient) GetCurrentValidators(header *types.Header, ibs *state.
 	return valz, ca, nil
 }
 
-func (cc *ContractClient) GetCurrentValidatorsWithSuperNode(header *types.Header, ibs *state.IntraBlockState, blockNumber *big.Int) ([]*ctypes.Validator, *ctypes.SystemContractsV2, error) {
+func (cc *ContractClient) GetCurrentValidatorsWithSuperNode(header *types.Header, ibs *state.IntraBlockState, blockNumber *big.Int) ([]*ctypes.Validator, *ctypes.SystemContracts, error) {
 	method := "getValidators"
 
 	// get packed data
@@ -405,7 +410,7 @@ func (cc *ContractClient) GetCurrentValidatorsWithSuperNode(header *types.Header
 		return nil, nil, err
 	}
 
-	ca := &ctypes.SystemContractsV2{
+	ca := &ctypes.SystemContracts{
 		StakeManager: (*ret2)[0],
 		SlashManager: (*ret2)[1],
 		SuperNode:    superNode,

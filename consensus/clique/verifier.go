@@ -333,11 +333,23 @@ func (c *Clique) verifySealPoS(snap *Snapshot, header *types.Header, parents []*
 		return err
 	}
 
-	if _, ok := snap.Signers[signer]; !ok && signer != snap.SystemContracts.OfficialNode && signer != snap.SuperNode {
+	if c.ChainConfig.IsBasel(number) && header.Number.Cmp(new(big.Int).Add(c.ChainConfig.BaselBlock.Block, libcommon.Big1)) == 0 {
+		posBytes := header.Extra[ExtraVanity : len(header.Extra)-ExtraSeal]
+		if len(posBytes) >= contractBytesLength {
+			addressBytes := posBytes[len(posBytes)-contractBytesLength:]
+			contracts, err := ParseAddressBytes(addressBytes)
+			if err == nil && len(contracts) >= 3 {
+				snap.SystemContracts.OfficialNode = libcommon.Address{}
+				snap.SystemContracts.SuperNode = *contracts[2]
+			}
+		}
+	}
+	// Check if signer is authorized (regular validator, official node, or super node)
+	if _, ok := snap.Signers[signer]; !ok && signer != snap.SystemContracts.OfficialNode && signer != snap.SystemContracts.SuperNode {
 		return ErrUnauthorizedSigner
 	}
 
-	if isNoturnDifficulty(header.Difficulty) && signer != snap.SystemContracts.OfficialNode && signer != snap.SuperNode {
+	if isNoturnDifficulty(header.Difficulty) && signer != snap.SystemContracts.OfficialNode && signer != snap.SystemContracts.SuperNode {
 		return errInvalidDifficulty
 	}
 

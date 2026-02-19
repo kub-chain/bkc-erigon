@@ -19,6 +19,9 @@ type ContractClient interface {
 	// // Set default signer for contract client
 	// SetSigner(signer types.Signer)
 
+	// Set BKC validator address
+	SetBKCValidatorAddress(address libcommon.Address)
+
 	// Inject config and things in to a client
 	Inject(val libcommon.Address, signFn ctypes.SignerFn, engine consensus.Engine)
 
@@ -46,7 +49,7 @@ type ContractClient interface {
 	GetCurrentValidators(header *types.Header, ibs *state.IntraBlockState, blockNumber *big.Int) ([]*ctypes.Validator, *ctypes.SystemContracts, error)
 
 	// Call for  current commited validators with super node
-	GetCurrentValidatorsWithSuperNode(header *types.Header, ibs *state.IntraBlockState, blockNumber *big.Int) ([]*ctypes.Validator, *ctypes.SystemContractsV2, error)
+	GetCurrentValidatorsWithSuperNode(header *types.Header, ibs *state.IntraBlockState, blockNumber *big.Int) ([]*ctypes.Validator, *ctypes.SystemContracts, error)
 
 	// Call for eligible validators
 	GetEligibleValidators(header *types.Header, ibs *state.IntraBlockState) ([]*ctypes.Validator, error)
