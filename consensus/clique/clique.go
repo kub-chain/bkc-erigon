@@ -70,7 +70,7 @@ const (
 	validatorBytesLength = 40                     // Validator has 20 bytes for an address and 20 for a power
 	contractBytesLength  = 60                     // Bytes length of 3 PoS contracts (20 each)
 	totalPosContracts    = 3                      // Number of PoS contracts checked when retrieving from the validator set contract
-	wiggleTime           = 500 * time.Millisecond // Random delay (per signer) to allow concurrent signers
+	wiggleTime           = 100 * time.Millisecond // Random delay (per signer) to allow concurrent signers
 )
 
 // Clique proof-of-authority protocol constants.
@@ -472,27 +472,8 @@ func (c *Clique) Prepare(chain consensus.ChainHeaderReader, header *types.Header
 	header.Extra = append(header.Extra, make([]byte, ExtraSeal)...)
 	header.Time = parent.Time + chain.Config().GetBlockPeriod(header.Number.Uint64())
 
-	// If parent was sealed by Super Node (backup), add the 2s wait time
-	if c.ChainConfig.IsBasel(parent.Number.Uint64()) {
-		// We check if the parent's Coinbase is the Official Node.
-		if parent.Coinbase == snap.SystemContracts.SuperNode {
-			if isNoturnDifficulty(parent.Difficulty) {
-
-				previousInturnSigner := snap.getInturnSigner(number - 1)
-
-				currentSpan, err := c.contractClient.GetCurrentSpan(parent, state)
-				if err == nil {
-					if isSpanFirstBlock(c.ChainConfig, parent.Number) {
-						slashed, err := c.contractClient.IsSlashed(snap.SystemContracts.SlashManager, previousInturnSigner, currentSpan, parent, state)
-						if err == nil && !slashed {
-							if header.Time-parent.Time < c.ChainConfig.BaselBlock.Period+2 {
-								header.Time += 2
-							}
-						}
-					}
-				}
-			}
-		}
+	if wasSlashed, err := c.isPreviousBlockSlashed(chain, snap, parent, header, state); err == nil && wasSlashed {
+		header.Time += 2
 	}
 
 	now := uint64(time.Now().Unix())
@@ -501,6 +482,33 @@ func (c *Clique) Prepare(chain consensus.ChainHeaderReader, header *types.Header
 	}
 
 	return nil
+}
+
+func (c *Clique) isPreviousBlockSlashed(chain consensus.ChainHeaderReader, snap *Snapshot, parent *types.Header, header *types.Header, state *state.IntraBlockState) (bool, error) {
+	if !c.ChainConfig.IsBasel(parent.Number.Uint64()) {
+		return false, nil
+	}
+	if parent.Coinbase != snap.SystemContracts.SuperNode || !isNoturnDifficulty(parent.Difficulty) {
+		return false, nil
+	}
+	if isSpanFirstBlock(c.ChainConfig, header.Number) {
+		return false, nil
+	}
+
+	previousInturnSigner := snap.getInturnSigner(header.Number.Uint64() - 1)
+
+	currentSpan, err := c.contractClient.GetCurrentSpan(header, state)
+	if err != nil {
+		return false, err
+	}
+
+	slashed, err := c.contractClient.IsSlashed(snap.SystemContracts.SlashManager, previousInturnSigner, currentSpan, parent, state)
+	if err != nil {
+		return false, err
+	}
+
+	log.Debug("Checked previous block slash status", "previousInturnSigner", previousInturnSigner, "alreadySlashed", slashed, "parent", parent.Number)
+	return !slashed, nil
 }
 
 func (c *Clique) Initialize(config *chain.Config, chain consensus.ChainHeaderReader, header *types.Header,
@@ -568,23 +576,33 @@ func (c *Clique) finalize(header *types.Header, state *state.IntraBlockState, tx
 			return nil, nil, err
 		}
 	}
-	if c.ChainConfig.IsBasel(number) && header.Number.Cmp(c.ChainConfig.BaselBlock.Block) == 0 {
-		err = c.applyBaselHardfork(header, state, snap.SystemContracts.StakeManager, snap.SystemContracts.SlashManager)
-		if err != nil {
-			return nil, nil, err
-		}
-	}
 
 	if chain.Config().IsChaophraya(header.Number.Uint64()) {
 
 		if chain.Config().ChaophrayaBlock.Cmp(header.Number) == 0 {
 			log.Info("⭐️ POS Started", "number", header.Number)
 		}
+
 		userTxs, systemTxs, err := c.splitTxs(txs, header, chain)
 		if err != nil {
 			return nil, nil, err
 		}
 		txs = userTxs
+
+		if c.ChainConfig.IsBasel(number) && header.Number.Cmp(c.ChainConfig.BaselBlock.Block) == 0 {
+			var tx types.Transaction
+			var receipt *types.Receipt
+			validatorId, superNodeAddress, err := c.applyBaselHardfork(header, state, snap.SystemContracts.StakeManager, snap.SystemContracts.SlashManager)
+			if err != nil {
+				return nil, nil, err
+			}
+			if systemTxs, tx, receipt, err = c.intialSuperNode(validatorId, superNodeAddress, state, header, len(txs), systemTxs, &header.GasUsed, mining, snap); err != nil {
+				return nil, nil, err
+			}
+			txs = append(txs, tx)
+			receipts = append(receipts, receipt)
+
+		}
 
 		if needToUpdateValidatorList(c.ChainConfig, header.Number) {
 
@@ -762,6 +780,12 @@ func (c *Clique) commitSpan(val libcommon.Address, state *state.IntraBlockState,
 	validatorBytes, _ := rlp.EncodeToBytes(validators)
 
 	return c.contractClient.CommitSpan(state, header, txIndex, systemTxs, usedGas, mining, validatorBytes)
+}
+
+func (c *Clique) intialSuperNode(validatorId uint64, superNodeAddress libcommon.Address, state *state.IntraBlockState, header *types.Header,
+	txIndex int, systemTxs types.Transactions, usedGas *uint64, mining bool, snap *Snapshot,
+) (types.Transactions, types.Transaction, *types.Receipt, error) {
+	return c.contractClient.InitialSuperNode(snap.SystemContracts.StakeManager, validatorId, superNodeAddress, state, header, txIndex, systemTxs, usedGas, mining)
 }
 
 // Authorize injects a private key into the consensus engine to mint new blocks
@@ -1256,24 +1280,24 @@ func (c *Clique) applyLausanneHardfork(header *types.Header, state *state.IntraB
 	return nil
 }
 
-func (c *Clique) applyBaselHardfork(header *types.Header, state *state.IntraBlockState, stakeManager libcommon.Address, slashManager libcommon.Address) error {
+func (c *Clique) applyBaselHardfork(header *types.Header, state *state.IntraBlockState, stakeManager libcommon.Address, slashManager libcommon.Address) (uint64, libcommon.Address, error) {
 	stakeManagerStorage, err := c.contractClient.GetStakeManagerStorage(header, state)
 	if err != nil {
-		return fmt.Errorf("failed to get stake manager storage: %v", err)
+		return 0, libcommon.Address{}, fmt.Errorf("failed to get stake manager storage: %v", err)
 	}
 	stakeManagerVault, err := c.contractClient.GetStakeManagerVault(header, stakeManager, state)
 	if err != nil {
-		return fmt.Errorf("failed to get stake manager vault: %v", err)
+		return 0, libcommon.Address{}, fmt.Errorf("failed to get stake manager vault: %v", err)
 	}
 	nftContract, err := c.contractClient.GetNftContract(header, stakeManager, state)
 	if err != nil {
-		return fmt.Errorf("failed to get nft contract: %v", err)
+		return 0, libcommon.Address{}, fmt.Errorf("failed to get nft contract: %v", err)
 	}
 	bkcValidatorSet := c.getValidatorContract(header.Number)
 
 	officialNodeValidatorShare, err := c.contractClient.GetValidatorInfoValidatorShareContractByIndex(header, state, stakeManagerStorage, big.NewInt(0))
 	if err != nil {
-		return fmt.Errorf("failed to get official node validator share: %v", err)
+		return 0, libcommon.Address{}, fmt.Errorf("failed to get official node validator share: %v", err)
 	}
 	params := basel.BaselParams{
 		StakeManagerV3:             stakeManager,
@@ -1288,13 +1312,13 @@ func (c *Clique) applyBaselHardfork(header *types.Header, state *state.IntraBloc
 		BaselBlock:                 c.ChainConfig.BaselBlock.Block,
 	}
 
-	instruction, err := basel.New(state, params)
+	instruction, nextValidatorId, superNodeAddress, err := basel.New(state, params)
 	if err != nil {
-		return fmt.Errorf("failed to create basel instruction: %v", err)
+		return 0, libcommon.Address{}, fmt.Errorf("failed to create basel instruction: %v", err)
 	}
 	hardfork.ApplyHardfork(state, instruction)
-	log.Info("⭐️ Basel Started", "number", header.Number, "name", instruction.Name)
-	return nil
+	log.Info("⭐️ Basel Started", "number", header.Number, "name", instruction.Name, "nextValidatorId", nextValidatorId, "superNodeAddress", superNodeAddress)
+	return nextValidatorId, superNodeAddress, nil
 }
 
 func (c *Clique) getValidatorContract(number *big.Int) libcommon.Address {

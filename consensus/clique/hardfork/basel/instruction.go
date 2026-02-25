@@ -118,22 +118,22 @@ const (
 	SLOT_IS_OFFICAL_POOL = 19
 )
 
-func New(state *state.IntraBlockState, params BaselParams) (hardfork.HardForkInstruction, error) {
+func New(state *state.IntraBlockState, params BaselParams) (hardfork.HardForkInstruction, uint64, libcommon.Address, error) {
 
 	if params.StakeManagerV3 == (libcommon.Address{}) {
-		return hardfork.HardForkInstruction{}, fmt.Errorf("create Lausanne hardfork requires StakeManagerV3 address")
+		return hardfork.HardForkInstruction{}, 0, libcommon.Address{}, fmt.Errorf("create Lausanne hardfork requires StakeManagerV3 address")
 	}
 	if params.StakeManagerStorageV3 == (libcommon.Address{}) {
-		return hardfork.HardForkInstruction{}, fmt.Errorf("create Lausanne hardfork requires StakeManagerStorageV3 address")
+		return hardfork.HardForkInstruction{}, 0, libcommon.Address{}, fmt.Errorf("create Lausanne hardfork requires StakeManagerStorageV3 address")
 	}
 	if params.SlashManagerV3 == (libcommon.Address{}) {
-		return hardfork.HardForkInstruction{}, fmt.Errorf("create Lausanne hardfork requires SlashManagerV2 address")
+		return hardfork.HardForkInstruction{}, 0, libcommon.Address{}, fmt.Errorf("create Lausanne hardfork requires SlashManagerV2 address")
 	}
 	if params.NftContractV3 == (libcommon.Address{}) {
-		return hardfork.HardForkInstruction{}, fmt.Errorf("create Lausanne hardfork requires NftContract address")
+		return hardfork.HardForkInstruction{}, 0, libcommon.Address{}, fmt.Errorf("create Lausanne hardfork requires NftContract address")
 	}
 	if params.BKCValidatorSetV3 == (libcommon.Address{}) {
-		return hardfork.HardForkInstruction{}, fmt.Errorf("create Lausanne hardfork requires BKCValidatorSetV3 address")
+		return hardfork.HardForkInstruction{}, 0, libcommon.Address{}, fmt.Errorf("create Lausanne hardfork requires BKCValidatorSetV3 address")
 	}
 
 	instruction := hardfork.HardForkInstruction{
@@ -328,7 +328,7 @@ func New(state *state.IntraBlockState, params BaselParams) (hardfork.HardForkIns
 		libcommon.BigToHash(big.NewInt(7)): libcommon.BytesToHash(params.NftContractV3.Bytes()),
 	}
 
-	return instruction, nil
+	return instruction, nextValidatorId, params.SuperNodeAddress, nil
 }
 
 func getMappingSlot(key libcommon.Hash, baseSlot uint64) libcommon.Hash {

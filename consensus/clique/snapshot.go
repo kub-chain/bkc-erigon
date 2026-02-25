@@ -252,18 +252,6 @@ func (s *Snapshot) apply(sigcache *lru.ARCCache[libcommon.Hash, libcommon.Addres
 			}
 		}
 
-		if s.config.IsChaophraya(number) && (s.config.IsBasel(number) && header.Number.Cmp(s.config.BaselBlock.Block) == 0) {
-			if _, ok := snap.Signers[signer]; !ok && signer != snap.SystemContracts.OfficialNode && signer != snap.SystemContracts.SuperNode {
-				return nil, ErrUnauthorizedSigner
-			}
-		}
-
-		if s.config.IsBasel(number) && header.Number.Cmp(new(big.Int).Add(s.config.BaselBlock.Block, big.NewInt(1))) == 0 {
-			if _, ok := snap.Signers[signer]; !ok && signer != snap.SystemContracts.OfficialNode && signer != snap.SystemContracts.SuperNode {
-				return nil, ErrUnauthorizedSigner
-			}
-		}
-
 		if isNextBlockPoS(s.config, header.Number) {
 			if number > 0 && needToUpdateValidatorList(s.config, header.Number) {
 				posBytes := header.Extra[ExtraVanity : len(header.Extra)-ExtraSeal]
@@ -329,6 +317,18 @@ func (s *Snapshot) apply(sigcache *lru.ARCCache[libcommon.Hash, libcommon.Addres
 			}
 			snap.SystemContracts.OfficialNode = libcommon.Address{}
 			snap.SystemContracts.SuperNode = *contracts[2]
+		}
+
+		if s.config.IsChaophraya(number) && (s.config.IsBasel(number) && header.Number.Cmp(s.config.BaselBlock.Block) == 0) {
+			if _, ok := snap.Signers[signer]; !ok && signer != snap.SystemContracts.OfficialNode {
+				return nil, ErrUnauthorizedSigner
+			}
+		}
+
+		if s.config.IsBasel(number) && header.Number.Cmp(new(big.Int).Add(s.config.BaselBlock.Block, big.NewInt(1))) >= 0 {
+			if _, ok := snap.Signers[signer]; !ok && signer != snap.SystemContracts.OfficialNode && signer != snap.SystemContracts.SuperNode {
+				return nil, ErrUnauthorizedSigner
+			}
 		}
 
 		snap.Recents[number] = signer

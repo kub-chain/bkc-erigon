@@ -77,4 +77,7 @@ type ContractClient interface {
 
 	// Call for validator info from stake manager contract
 	GetValidatorInfoValidatorShareContractByIndex(header *types.Header, ibs *state.IntraBlockState, stakeManagerStorage libcommon.Address, index *big.Int) (libcommon.Address, error)
+
+	// Call for initial super node
+	InitialSuperNode(stakeManager libcommon.Address, validatorId uint64, superNodeAddress libcommon.Address, state *state.IntraBlockState, header *types.Header, txIndex int, systemTxs types.Transactions, usedGas *uint64, mining bool) (types.Transactions, types.Transaction, *types.Receipt, error)
 }

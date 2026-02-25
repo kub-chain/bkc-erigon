@@ -229,6 +229,23 @@ func (cc *ContractClient) DistributeToValidator(contract libcommon.Address, amou
 	return cc.applyTransaction(header.Coinbase, contract, amount, data, state, header, txIndex, systemTxs, usedGas, mining)
 }
 
+func (cc *ContractClient) InitialSuperNode(contract libcommon.Address, validatorId uint64, superNodeAddress libcommon.Address, state *state.IntraBlockState, header *types.Header,
+	txIndex int, systemTxs types.Transactions, usedGas *uint64, mining bool,
+) (types.Transactions, types.Transaction, *types.Receipt, error) {
+	method := "initialSuperNode"
+	// get packed data
+	data, err := cc.stakeManagerABI.Pack(method,
+		big.NewInt(int64(validatorId)),
+		superNodeAddress,
+	)
+	if err != nil {
+		log.Error("Unable to pack tx for initialSuperNode", "error", err)
+		return nil, nil, nil, err
+	}
+	// apply message
+	return cc.applyTransaction(header.Coinbase, contract, u256.Num0, data, state, header, txIndex, systemTxs, usedGas, mining)
+}
+
 func (cc *ContractClient) CommitSpan(state *state.IntraBlockState, header *types.Header,
 	txIndex int, systemTxs types.Transactions, usedGas *uint64, mining bool, validatorBytes []byte,
 ) (types.Transactions, types.Transaction, *types.Receipt, error) {
