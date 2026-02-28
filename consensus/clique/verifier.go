@@ -76,6 +76,11 @@ func (c *Clique) verifyHeader(chain consensus.ChainHeaderReader, header *types.H
 			signersBytes -= contractBytesLength
 		}
 	}
+
+	if header.Number.Cmp(new(big.Int).Add(libcommon.Big1, c.ChainConfig.BaselBlock.Block)) == 0 {
+		checkpoint = true
+	}
+
 	if !checkpoint && signersBytes != 0 {
 		return errExtraSigners
 	}
@@ -138,7 +143,7 @@ func (c *Clique) verifyCascadingFields(chain consensus.ChainHeaderReader, header
 		return consensus.ErrUnknownAncestor
 	}
 
-	if parent.Time+c.config.Period > header.Time {
+	if parent.Time+chain.Config().GetBlockPeriod(header.Number.Uint64()) > header.Time {
 		return errInvalidTimestamp
 	}
 	// Verify that the gasUsed is <= gasLimit
@@ -328,12 +333,23 @@ func (c *Clique) verifySealPoS(snap *Snapshot, header *types.Header, parents []*
 		return err
 	}
 
-	if _, ok := snap.Signers[signer]; !ok && signer != snap.SystemContracts.OfficialNode {
+	if c.ChainConfig.IsBasel(number) && header.Number.Cmp(new(big.Int).Add(c.ChainConfig.BaselBlock.Block, libcommon.Big1)) == 0 {
+		posBytes := header.Extra[ExtraVanity : len(header.Extra)-ExtraSeal]
+		if len(posBytes) >= contractBytesLength {
+			addressBytes := posBytes[len(posBytes)-contractBytesLength:]
+			contracts, err := ParseAddressBytes(addressBytes)
+			if err == nil && len(contracts) >= 3 {
+				snap.SystemContracts.OfficialNode = libcommon.Address{}
+				snap.SystemContracts.SuperNode = *contracts[2]
+			}
+		}
+	}
+	// Check if signer is authorized (regular validator, official node, or super node)
+	if _, ok := snap.Signers[signer]; !ok && signer != snap.SystemContracts.OfficialNode && signer != snap.SystemContracts.SuperNode {
 		return ErrUnauthorizedSigner
 	}
 
-	blockSigner, _ := ecrecover(header, c.signatures)
-	if isNoturnDifficulty(header.Difficulty) && blockSigner != snap.SystemContracts.OfficialNode {
+	if isNoturnDifficulty(header.Difficulty) && signer != snap.SystemContracts.OfficialNode && signer != snap.SystemContracts.SuperNode {
 		return errInvalidDifficulty
 	}
 

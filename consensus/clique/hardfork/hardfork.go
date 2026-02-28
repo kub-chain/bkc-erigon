@@ -20,7 +20,7 @@ func ApplyHardfork(state *state.IntraBlockState, instruction HardForkInstruction
 			v, overflow := uint256.FromBig(value.Big())
 			if !overflow {
 				state.SetState(address, &k, *v)
-				log.Debug("Set storage", "address", address.Hex, "key", key.Hex(), "value", value.Hex())
+				log.Debug("Set storage", "address", address.Hex(), "key", key.Hex(), "value", value.Hex())
 			} else {
 				log.Error("Set storage (apply hardfork) failed to convert value to uint256", "value", value.Hex())
 			}
