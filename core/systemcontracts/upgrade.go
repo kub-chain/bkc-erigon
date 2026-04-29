@@ -76,11 +76,15 @@ func init() {
 		KubPosStakeManagerMainnet:        kubPosMainnetStakeManagerRecords,
 		KubPosSlashManagerMainnet:        kubPosMainnetSlashManagerRecords,
 		KubPosStakeManagerStorageMainnet: kubPosMainnetStakeManagerStorageRecords,
+		KubPosBKCValidatorSetMainnet:     kubPosMainnetBKCValidatorSetRecords,
+		KubPosNftContractMainnet:         kubPosMainnetNftContractRecords,
 	}
 	SystemContractCodeLookup[networkname.BkcTestnetChainName] = map[libcommon.Address][]libcommon.CodeRecord{
 		KubPosStakeManagerTestnet:        kubPosTestnetStakeManagerRecords,
 		KubPosSlashManagerTestnet:        kubPosTestnetSlashManagerRecords,
 		KubPosStakeManagerStorageTestnet: kubPosTestnetStakeManagerStorageRecords,
+		KubPosBKCValidatorSetTestnet:     kubPosTestnetBKCValidatorSetRecords,
+		KubPosNftContractTestnet:         kubPosTestnetNftContractRecords,
 	}
 }
 
